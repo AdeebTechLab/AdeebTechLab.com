@@ -162,4 +162,79 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
   }
+
+  // ---- QR certificate scanner ---------------------------------------------
+  // Certificates carry a QR code that encodes just the certificate ID
+  // (e.g. "ATL-2024-00123"). Scanning redirects to the LMS verify page
+  // with that ID attached as a query param.
+  const VERIFY_BASE_URL = 'https://lms-adeeb-technology-lab.vercel.app/verify';
+
+  const scanBtn = document.getElementById('scanBtn');
+  const scanModal = document.getElementById('scanModal');
+  const scanModalBackdrop = document.getElementById('scanModalBackdrop');
+  const scanModalClose = document.getElementById('scanModalClose');
+  const scanModalHint = document.getElementById('scanModalHint');
+  let html5QrCode = null;
+  let scannerRunning = false;
+
+  const stopScanner = () => {
+    if (html5QrCode && scannerRunning) {
+      scannerRunning = false;
+      html5QrCode.stop().then(() => html5QrCode.clear()).catch(() => {});
+    }
+  };
+
+  const closeScanModal = () => {
+    stopScanner();
+    scanModal.setAttribute('hidden', '');
+    document.body.style.overflow = '';
+  };
+
+  const onScanSuccess = (decodedText) => {
+    if (!scannerRunning) return;
+    stopScanner();
+    scanModalHint.textContent = 'Certificate found — redirecting…';
+    const certId = decodedText.trim();
+    const url = `${VERIFY_BASE_URL}?id=${encodeURIComponent(certId)}`;
+    setTimeout(() => {
+      window.open(url, '_blank', 'noopener,noreferrer');
+      closeScanModal();
+    }, 400);
+  };
+
+  const openScanModal = () => {
+    if (typeof Html5Qrcode === 'undefined') {
+      scanModalHint.textContent = 'Scanner failed to load. Check your connection and try again.';
+      scanModal.removeAttribute('hidden');
+      return;
+    }
+
+    scanModalHint.textContent = 'Point your camera at the QR code on the certificate.';
+    scanModal.removeAttribute('hidden');
+    document.body.style.overflow = 'hidden';
+
+    html5QrCode = new Html5Qrcode('qrReader');
+    scannerRunning = true;
+
+    html5QrCode
+      .start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 240, height: 240 } },
+        onScanSuccess,
+        () => {} // ignore per-frame "not found" errors
+      )
+      .catch(() => {
+        scannerRunning = false;
+        scanModalHint.textContent = 'Camera access is required to scan. Please allow camera permission and try again.';
+      });
+  };
+
+  if (scanBtn && scanModal) {
+    scanBtn.addEventListener('click', openScanModal);
+    scanModalClose.addEventListener('click', closeScanModal);
+    scanModalBackdrop.addEventListener('click', closeScanModal);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !scanModal.hasAttribute('hidden')) closeScanModal();
+    });
+  }
 });
